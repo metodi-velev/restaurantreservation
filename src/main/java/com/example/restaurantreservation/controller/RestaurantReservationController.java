@@ -48,7 +48,7 @@ import org.springframework.web.bind.annotation.RestController;
  *   Table 10: 40 seats
  * </pre>
  *
- * @author Your Name
+ * @author Metodi Velev
  * @version 1.0
  * @see Table
  * @see TimeSlot
