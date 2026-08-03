@@ -1,9 +1,16 @@
 package com.example.restaurantreservation.controller;
 
 import com.example.restaurantreservation.dto.ReservationRequest;
+import com.example.restaurantreservation.dto.ErrorDto;
 import com.example.restaurantreservation.entity.TimeSlot;
 import com.example.restaurantreservation.entity.Table;
 import com.example.restaurantreservation.service.RestaurantReservationService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -54,6 +61,7 @@ import org.springframework.web.bind.annotation.RestController;
  * @see TimeSlot
  * @since 2026-08-03
  */
+@Tag(name = "Table Reservations", description = "Endpoints for managing restaurant table reservations")
 @Validated
 @RestController("tables")
 @RequestMapping("/tables")
@@ -65,6 +73,27 @@ public class RestaurantReservationController {
         this.restaurantReservationService = restaurantReservationService;
     }
 
+    @Operation(
+            summary = "Reserve a table",
+            description = "Creates a new reservation by finding the smallest available table that fits the party size for the given time slot."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Table successfully reserved",
+                    content = @Content(schema = @Schema(implementation = Long.class))
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid request parameters or business rule violation",
+                    content = @Content(schema = @Schema(implementation = ErrorDto.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "No suitable table available for the given party size and time slot",
+                    content = @Content(schema = @Schema(implementation = ErrorDto.class))
+            )
+    })
     @PostMapping
     public ResponseEntity<Long> reserveTable(@Valid @RequestBody ReservationRequest reservationRequest) {
         return ResponseEntity.ok(

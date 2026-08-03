@@ -42,4 +42,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                         .message(exception.getMessage())
                         .build());
     }
+
+    @ExceptionHandler(RuntimeException.class)
+    public ResponseEntity<ErrorDto> handleRuntimeException(RuntimeException exception) {
+        log.error(exception.getMessage(), exception);
+        HttpStatus status = exception.getMessage().contains("no table which suits your search criteria") 
+                ? HttpStatus.NOT_FOUND : HttpStatus.INTERNAL_SERVER_ERROR;
+        
+        return ResponseEntity.status(status)
+                .body(ErrorDto.builder()
+                        .code(status.getReasonPhrase())
+                        .message(exception.getMessage())
+                        .build());
+    }
 }
