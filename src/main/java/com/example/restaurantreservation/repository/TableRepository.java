@@ -12,7 +12,13 @@ import java.util.List;
 
 @Repository
 public interface TableRepository extends JpaRepository<Table, Long> {
-    @Query("SELECT DISTINCT t FROM Table t JOIN t.timeSlots ts WHERE ts.reserved = false AND ts.date = :date AND ts.fromTime >= :fromTime AND ts.toTime <= :toTime")
+    @Query("SELECT DISTINCT t FROM Table t JOIN t.timeSlots ts WHERE " +
+            "ts.reserved = false AND ts.date = :date AND ts.fromTime >= :fromTime AND ts.toTime <= :toTime AND " +
+            "NOT EXISTS (SELECT 1 FROM TimeSlot ts2 WHERE ts2.table = t AND " +
+            "ts2.reserved = true AND " +
+            "ts2.date = :date AND " +
+            "ts2.fromTime >= :fromTime AND " +
+            "ts2.toTime <= :toTime)")
     List<Table> findAvailableTablesForTimeRange(
             @Param("date") LocalDate date,
             @Param("fromTime") LocalTime fromTime,
