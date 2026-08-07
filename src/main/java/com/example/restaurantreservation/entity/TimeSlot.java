@@ -35,4 +35,8 @@ public class TimeSlot {
     Table table;
 
     boolean reserved;
+
+    @Version
+    @Column(name = "version")
+    private Long version;
 }

@@ -9,15 +9,20 @@ import jakarta.annotation.PostConstruct;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Recover;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -52,44 +57,64 @@ import java.util.stream.IntStream;
 @Setter
 @Transactional(rollbackFor = {IllegalArgumentException.class, RuntimeException.class})
 @Service
+@Slf4j
 public class RestaurantReservationService {
 
     private final TableRepository tableRepository;
     private final TimeSlotRepository timeSlotRepository;
+    private final TimeSlotReservationService timeSlotReservationService;
+    private final ConcurrentHashMap<String, ReentrantLock> tableLocks = new ConcurrentHashMap<>();
 
     public RestaurantReservationService(TableRepository tableRepository,
-                                        TimeSlotRepository timeSlotRepository) {
+                                        TimeSlotRepository timeSlotRepository,
+                                        TimeSlotReservationService timeSlotReservationService) {
         this.tableRepository = tableRepository;
         this.timeSlotRepository = timeSlotRepository;
+        this.timeSlotReservationService = timeSlotReservationService;
     }
 
+    @Transactional
+    @Retryable(
+            retryFor = {OptimisticLockingFailureException.class},
+            maxAttempts = 5,
+            backoff = @Backoff(delay = 50, multiplier = 1.5)
+    )
+    //@Transactional(propagation = Propagation.REQUIRES_NEW)
     public Long reserveTable(Integer partySize, TimeSlotDto timeSlot) {
 
         validateTimeslot(timeSlot);
 
-        Optional<Table> tableEntity = tableRepository.findAvailableTablesForTimeRange(
-                        timeSlot.date(), timeSlot.from(), timeSlot.to()
+        Table tableEntity = tableRepository.findAvailableTablesForTimeRange(
+                        partySize, timeSlot.date(), timeSlot.from(), timeSlot.to()
                 )
                 .stream()
-                .filter(table ->
-                        partySize <= table.getCapacity()
-                )
-                .min(Comparator.comparing(Table::getCapacity));
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("There is no table which suits your search criteria."));
 
-        tableEntity.ifPresent(table -> {
-            reserveTimeSlots(table.getTimeSlots(), timeSlot.date(), timeSlot.from(), timeSlot.to());
-        });
+        //reserveTimeSlots(tableEntity.getId(), timeSlot.date(), timeSlot.from(), timeSlot.to());
+        timeSlotReservationService.reserveTimeSlots(tableEntity.getId(), timeSlot.date(), timeSlot.from(), timeSlot.to());
 
-        return tableEntity.map(Table::getId).orElseThrow(() ->
-                new RuntimeException("There is no table which" +
-                        " suits your search criteria."));
+        return tableEntity.getId();
     }
 
-    private void reserveTimeSlots(List<TimeSlot> timeSlots, LocalDate date, LocalTime from, LocalTime to) {
-        timeSlots.stream()
-                .filter(ts -> ts.getDate().equals(date) &&
-                        !ts.isReserved() && !ts.getFromTime().isBefore(from) && !ts.getToTime().isAfter(to))
-                .forEach(ts -> ts.setReserved(true));
+    private void reserveTimeSlots(Long tableId, LocalDate date, LocalTime from, LocalTime to) {
+        timeSlotRepository.findForReservation(
+                tableId,
+                date,
+                from,
+                to
+        ).forEach(ts -> ts.setReserved(true));
+
+        log.info("Table {} reserved for party on {} at {} - {}",
+                tableId, date, from, to);
+    }
+
+    @Recover
+    public Long recoverOptimisticLockingFailure(OptimisticLockingFailureException e,
+                                                Integer partySize,
+                                                TimeSlotDto timeSlot) {
+        log.warn("All retries failed for partySize: {}, timeSlot: {}", partySize, timeSlot);
+        throw new RuntimeException("Unable to reserve table after multiple attempts", e);
     }
 
     private static void validateTimeslot(TimeSlotDto timeSlot) {
@@ -145,7 +170,7 @@ public class RestaurantReservationService {
     }
 
     @PostConstruct
-    private List<Table> initTables() {
+    List<Table> initTables() {
         int[] capacities = {4, 6, 8, 12, 16, 20, 26, 30, 36, 40};
 
         List<Table> tables = IntStream.range(0, capacities.length)

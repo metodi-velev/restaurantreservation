@@ -34,6 +34,10 @@ public class Table {
 
     Integer capacity;
 
+    @Version
+    @Column(name = "version")
+    private Long version;
+
     public Table(String tableName, Integer capacity) {
         this.tableName = tableName;
         this.capacity = capacity;
