@@ -1,5 +1,6 @@
 package com.example.restaurantreservation.entity;
 
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -29,7 +30,9 @@ public class Table {
     List<TimeSlot> timeSlots = new ArrayList<>();
 
     @OneToOne(orphanRemoval = true,
+            cascade = CascadeType.ALL,
             mappedBy = "table")
+    @JsonManagedReference
     Picture picture;
 
     Integer capacity;

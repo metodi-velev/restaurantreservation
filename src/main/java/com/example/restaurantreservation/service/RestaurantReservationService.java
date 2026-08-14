@@ -1,8 +1,10 @@
 package com.example.restaurantreservation.service;
 
 import com.example.restaurantreservation.dto.TimeSlotDto;
+import com.example.restaurantreservation.entity.Picture;
 import com.example.restaurantreservation.entity.Table;
 import com.example.restaurantreservation.entity.TimeSlot;
+import com.example.restaurantreservation.repository.PictureRepository;
 import com.example.restaurantreservation.repository.TableRepository;
 import com.example.restaurantreservation.repository.TimeSlotRepository;
 import jakarta.annotation.PostConstruct;
@@ -17,13 +19,15 @@ import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 /**
@@ -60,17 +64,25 @@ import java.util.stream.IntStream;
 @Slf4j
 public class RestaurantReservationService {
 
+    private static final int[] TABLE_CAPACITIES = {4, 6, 8, 12, 16, 20, 26, 30, 36, 40};
+    private static final int NUMBER_OF_TABLES = TABLE_CAPACITIES.length;
+    private static final int TIME_SLOT_START_HOUR = 10;
+    private static final int TIME_SLOT_END_HOUR = 23;
+
     private final TableRepository tableRepository;
     private final TimeSlotRepository timeSlotRepository;
     private final TimeSlotReservationService timeSlotReservationService;
+    private final PictureRepository pictureRepository;
     private final ConcurrentHashMap<String, ReentrantLock> tableLocks = new ConcurrentHashMap<>();
 
     public RestaurantReservationService(TableRepository tableRepository,
                                         TimeSlotRepository timeSlotRepository,
-                                        TimeSlotReservationService timeSlotReservationService) {
+                                        TimeSlotReservationService timeSlotReservationService,
+                                        PictureRepository pictureRepository) {
         this.tableRepository = tableRepository;
         this.timeSlotRepository = timeSlotRepository;
         this.timeSlotReservationService = timeSlotReservationService;
+        this.pictureRepository = pictureRepository;
     }
 
     @Transactional
@@ -170,56 +182,104 @@ public class RestaurantReservationService {
     }
 
     @PostConstruct
-    List<Table> initTables() {
-        int[] capacities = {4, 6, 8, 12, 16, 20, 26, 30, 36, 40};
-
-        List<Table> tables = IntStream.range(0, capacities.length)
-                .mapToObj(i -> new Table(
-                        "Table " + (i + 1),
-                        capacities[i]
-                ))
-                .collect(Collectors.toList());
-
-        for (Table table : tables) {
-            List<TimeSlot> timeSlots = initializeTimeslots();
-            timeSlots.forEach(table::addTimeSlot);
-            tableRepository.save(table);
+    @Transactional
+    public void initTables() {
+        if (tableRepository.count() > 0) {
+            log.info("Tables already initialized, skipping...");
+            return;
         }
+
+        List<Table> tables = createTables();
+        tableRepository.saveAll(tables);
 
         validateTables(tables);
 
-        return tables;
+        log.info("Successfully initialized {} tables", tables.size());
     }
 
-    public void validateTables(List<Table> tables) {
-        if (tables == null || tables.size() != 10) {
-            throw new RuntimeException(
-                    String.format("The restaurant reservation tables don't match! Size: %s", (tables == null ? 0 : tables.size())));
-        }
+    private List<Table> createTables() {
+        return IntStream.range(0, NUMBER_OF_TABLES)
+                .mapToObj(this::createTable)
+                .toList();
     }
 
-    protected List<TimeSlot> initializeTimeslots() {
+    private Table createTable(int index) {
+        Table table = Table.builder()
+                .tableName("Table " + (index + 1))
+                .capacity(TABLE_CAPACITIES[index])
+                .build();
+
+        // Add time slots
+        initializeTimeSlots().forEach(table::addTimeSlot);
+
+        // Add picture
+        Picture picture = createPicture(index + 1);
+        table.setPicture(picture);
+        picture.setTable(table);
+
+        return table;
+    }
+
+    private Picture createPicture(int tableNumber) {
+        return Picture.builder()
+                .name("Table " + tableNumber + " Picture")
+                .imageData(initializeImage(tableNumber))
+                .build();
+    }
+
+    private List<TimeSlot> initializeTimeSlots() {
         List<TimeSlot> timeSlots = new ArrayList<>();
+        LocalDate startDate = LocalDate.now();
 
-        for (int i = 0; i < 14; i++) {
-            LocalDate date = LocalDate.now().plusDays(i);
-            int start = 10;
-            int currentHour = LocalTime.now().getHour();
-            if (i == 0 && currentHour > 10) {
-                start = currentHour + 1;
-            }
-            for (int j = start; j < 23; j++) {
-                LocalTime from = LocalTime.of(j, 0);
-                LocalTime to = LocalTime.of(j + 1, 0);
-                timeSlots.add(TimeSlot.builder()
-                        .date(date)
-                        .fromTime(from)
-                        .toTime(to)
-                        .build());
+        // Generate time slots for the next 14 days
+        for (int dayOffset = 0; dayOffset < 14; dayOffset++) {
+            LocalDate date = startDate.plusDays(dayOffset);
+            int startHour = getStartHour(dayOffset);
+
+            for (int hour = startHour; hour < TIME_SLOT_END_HOUR; hour++) {
+                timeSlots.add(createTimeSlot(date, hour));
             }
         }
 
         return timeSlots;
+    }
+
+    private int getStartHour(int dayOffset) {
+        int currentHour = LocalTime.now().getHour();
+        if (dayOffset == 0 && currentHour > TIME_SLOT_START_HOUR) {
+            return currentHour + 1;
+        }
+        return TIME_SLOT_START_HOUR;
+    }
+
+    private TimeSlot createTimeSlot(LocalDate date, int hour) {
+        return TimeSlot.builder()
+                .date(date)
+                .fromTime(LocalTime.of(hour, 0))
+                .toTime(LocalTime.of(hour + 1, 0))
+                .build();
+    }
+
+    private byte[] initializeImage(int tableNumber) {
+        try {
+            String imagePath = String.format("src/main/resources/images/table_%d_picture.jpg", tableNumber);
+            return Files.readAllBytes(Paths.get(imagePath));
+        } catch (IOException e) {
+            log.warn("Could not load image for table {}: {}", tableNumber, e.getMessage());
+            // Return a default placeholder image or null
+            return new byte[0];
+        }
+    }
+
+    private void validateTables(List<Table> tables) {
+        if (tables == null || tables.size() != NUMBER_OF_TABLES) {
+            throw new RuntimeException(String.format(
+                    "Expected %d tables, but found %d",
+                    NUMBER_OF_TABLES,
+                    tables != null ? tables.size() : 0
+            ));
+        }
+        log.info("Validation successful: {} tables initialized", tables.size());
     }
 }
 

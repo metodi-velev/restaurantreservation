@@ -1,10 +1,12 @@
 package com.example.restaurantreservation.controller;
 
-import com.example.restaurantreservation.dto.ReservationRequest;
 import com.example.restaurantreservation.dto.ErrorDto;
-import com.example.restaurantreservation.entity.TimeSlot;
+import com.example.restaurantreservation.dto.ReservationRequest;
+import com.example.restaurantreservation.dto.ReservationResponseWithPictureWithEndpoint;
 import com.example.restaurantreservation.entity.Table;
+import com.example.restaurantreservation.entity.TimeSlot;
 import com.example.restaurantreservation.service.RestaurantReservationService;
+import com.example.restaurantreservation.service.RestaurantReservationServiceWithPicture;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -68,9 +70,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class RestaurantReservationController {
 
     private final RestaurantReservationService restaurantReservationService;
+    private final RestaurantReservationServiceWithPicture restaurantReservationServiceWithPicture;
 
-    public RestaurantReservationController(RestaurantReservationService restaurantReservationService) {
+    public RestaurantReservationController(RestaurantReservationService restaurantReservationService,
+                                           RestaurantReservationServiceWithPicture restaurantReservationServiceWithPicture) {
         this.restaurantReservationService = restaurantReservationService;
+        this.restaurantReservationServiceWithPicture = restaurantReservationServiceWithPicture;
     }
 
     @Operation(
@@ -101,5 +106,17 @@ public class RestaurantReservationController {
                 reservationRequest.partySize(),
                 reservationRequest.timeSlotDto()
         ));
+    }
+
+    @PostMapping("/with-picture")
+    public ResponseEntity<ReservationResponseWithPictureWithEndpoint> reserveTableWithPicture(@Valid @RequestBody ReservationRequest reservationRequest) {
+
+        ReservationResponseWithPictureWithEndpoint resp = restaurantReservationServiceWithPicture.reserveTableWithPicture(
+                reservationRequest.partySize(),
+                reservationRequest.timeSlotDto()
+        );
+
+        return ResponseEntity.ok()
+                .body(resp);
     }
 }

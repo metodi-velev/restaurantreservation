@@ -1,5 +1,6 @@
 package com.example.restaurantreservation.entity;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -23,5 +24,6 @@ public class Picture {
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "table_id")
+    @JsonBackReference
     Table table;
 }

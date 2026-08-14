@@ -56,4 +56,11 @@ public interface TableRepository extends JpaRepository<Table, Long> {
             @Param("fromTime") LocalTime fromTime,
             @Param("toTime") LocalTime toTime
     );
+
+    @Query("""
+            SELECT t
+            FROM Table t JOIN FETCH t.picture pic
+            WHERE t.id = :id
+            """)
+    Optional<Table> findTableById(@Param("id") Long id);
 }
