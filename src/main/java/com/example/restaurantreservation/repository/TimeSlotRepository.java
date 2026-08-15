@@ -35,4 +35,20 @@ public interface TimeSlotRepository extends JpaRepository<TimeSlot, Long> {
             @Param("date") LocalDate date,
             @Param("from") LocalTime from,
             @Param("to") LocalTime to);
+
+    @Query("""
+        SELECT ts
+        FROM TimeSlot ts
+        WHERE ts.table.id = :tableId
+          AND ts.date = :date
+          AND ts.fromTime >= :from
+          AND ts.toTime <= :to
+          AND ts.reserved = true
+        ORDER BY ts.fromTime
+    """)
+    List<TimeSlot> findReservedTimeSlots(
+            @Param("tableId") Long tableId,
+            @Param("date") LocalDate date,
+            @Param("from") LocalTime from,
+            @Param("to") LocalTime to);
 }

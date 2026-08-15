@@ -2,9 +2,14 @@ package com.example.restaurantreservation.service;
 
 import com.example.restaurantreservation.dto.TimeSlotDto;
 import com.example.restaurantreservation.entity.Picture;
+import com.example.restaurantreservation.entity.Reservation;
 import com.example.restaurantreservation.entity.Table;
 import com.example.restaurantreservation.entity.TimeSlot;
+import com.example.restaurantreservation.exception.ReservationNotFoundException;
+import com.example.restaurantreservation.exception.TimeSlotAlreadyReservedException;
+import com.example.restaurantreservation.exception.TimeSlotNotFoundException;
 import com.example.restaurantreservation.repository.PictureRepository;
+import com.example.restaurantreservation.repository.ReservationRepository;
 import com.example.restaurantreservation.repository.TableRepository;
 import com.example.restaurantreservation.repository.TimeSlotRepository;
 import jakarta.annotation.PostConstruct;
@@ -12,6 +17,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Recover;
@@ -20,8 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
+import java.nio.file.InvalidPathException;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
@@ -73,21 +79,25 @@ public class RestaurantReservationService {
     private final TimeSlotRepository timeSlotRepository;
     private final TimeSlotReservationService timeSlotReservationService;
     private final PictureRepository pictureRepository;
+    private final ReservationRepository reservationRepository;
     private final ConcurrentHashMap<String, ReentrantLock> tableLocks = new ConcurrentHashMap<>();
 
     public RestaurantReservationService(TableRepository tableRepository,
                                         TimeSlotRepository timeSlotRepository,
                                         TimeSlotReservationService timeSlotReservationService,
-                                        PictureRepository pictureRepository) {
+                                        PictureRepository pictureRepository,
+                                        ReservationRepository reservationRepository) {
         this.tableRepository = tableRepository;
         this.timeSlotRepository = timeSlotRepository;
         this.timeSlotReservationService = timeSlotReservationService;
         this.pictureRepository = pictureRepository;
+        this.reservationRepository = reservationRepository;
     }
 
     @Transactional
     @Retryable(
-            retryFor = {OptimisticLockingFailureException.class},
+            retryFor = {TimeSlotNotFoundException.class, TimeSlotAlreadyReservedException.class,
+                    OptimisticLockingFailureException.class},
             maxAttempts = 5,
             backoff = @Backoff(delay = 50, multiplier = 1.5)
     )
@@ -126,7 +136,47 @@ public class RestaurantReservationService {
                                                 Integer partySize,
                                                 TimeSlotDto timeSlot) {
         log.warn("All retries failed for partySize: {}, timeSlot: {}", partySize, timeSlot);
-        throw new RuntimeException("Unable to reserve table after multiple attempts", e);
+        throw new OptimisticLockingFailureException("Unable to reserve table after multiple attempts", e);
+    }
+
+    /**
+     * Recovery method for TimeSlotNotFoundException
+     * IMPORTANT: Must have the SAME parameters as the retryable method,
+     * with the exception as the FIRST parameter, and the SAME return type
+     */
+    @Recover
+    public Long recover(TimeSlotNotFoundException e, Integer partySize, TimeSlotDto timeSlot) {
+        log.warn("All retry attempts exhausted for TimeSlotNotFoundException: partySize={}, timeSlot={}",
+                partySize, timeSlot);
+        // Re-throw the original exception (or a custom one)
+        throw new TimeSlotNotFoundException("No available time slots found. Please try a different time.");
+    }
+
+    @Recover
+    public Long recover(TimeSlotAlreadyReservedException e, Integer partySize, TimeSlotDto timeSlot) {
+        log.warn("All retry attempts exhausted for TimeSlotAlreadyReservedException: partySize={}, timeSlot={}",
+                partySize, timeSlot);
+        // Re-throw the original exception (or a custom one)
+        throw new TimeSlotAlreadyReservedException("Time slot already reserved. Please try a different time.");
+    }
+
+    /**
+     * Recovery method for OptimisticLockingFailureException
+     */
+    @Recover
+    public Long recover(OptimisticLockingFailureException e, Integer partySize, TimeSlotDto timeSlot) {
+        log.warn("All retry attempts exhausted for OptimisticLockingFailure: partySize={}, timeSlot={}",
+                partySize, timeSlot);
+        throw new OptimisticLockingFailureException("Unable to reserve table due to concurrent modification. Please try again.");
+    }
+
+    /**
+     * Generic recovery for any other exception
+     */
+    @Recover
+    public Long recover(Exception e, Integer partySize, TimeSlotDto timeSlot) {
+        log.error("All retry attempts exhausted: {}", e.getMessage(), e);
+        throw new RuntimeException("Unable to process reservation. Please try again later.");
     }
 
     private static void validateTimeslot(TimeSlotDto timeSlot) {
@@ -169,7 +219,39 @@ public class RestaurantReservationService {
         return invalidHours;
     }
 
-    public void cancelReservation(Long tableId, LocalTime timeSlot) {
+    public void cancelReservation(Long tableId, TimeSlotDto timeSlot) {
+
+        Reservation reservation = reservationRepository.findReservationByTableIdAndDateAndFromTimeAndToTime(
+                tableId,
+                timeSlot.date(),
+                timeSlot.from(),
+                timeSlot.to()
+        ).orElseThrow(() -> new ReservationNotFoundException(
+            String.format("There exists no (single) reservation for table id %s on %s from %s to %s o'clock",
+                    tableId,
+                    timeSlot.date(),
+                    timeSlot.from(),
+                    timeSlot.to())
+        ));
+
+        reservationRepository.delete(reservation);
+
+        tableRepository.findTableWithReservedTimeSlotsForTimeRange(
+                tableId,
+                timeSlot.date(),
+                timeSlot.from(),
+                timeSlot.to()
+        ).orElseThrow(() -> new RuntimeException("There is no table which suits your search criteria."));
+
+        List<TimeSlot> reservedTimeSlots = timeSlotRepository
+                .findReservedTimeSlots(
+                        tableId,
+                        timeSlot.date(),
+                        timeSlot.from(),
+                        timeSlot.to()
+                );
+        reservedTimeSlots.forEach(reservedTimeSlot -> reservedTimeSlot.setReserved(false));
+
 /*        Optional<Table> reservedTable = tables.stream()
                 .filter(table -> table.getId().equals(tableId))
                 .findFirst();
@@ -262,9 +344,16 @@ public class RestaurantReservationService {
 
     private byte[] initializeImage(int tableNumber) {
         try {
-            String imagePath = String.format("src/main/resources/images/table_%d_picture.jpg", tableNumber);
-            return Files.readAllBytes(Paths.get(imagePath));
-        } catch (IOException e) {
+            String imagePath = String.format("images/table_%d_picture.jpg", tableNumber);
+            Resource resource = new ClassPathResource(imagePath);
+
+            if (!resource.exists()) {
+                log.warn("Image not found for table {}: {}", tableNumber, imagePath);
+                return new byte[0];
+            }
+
+            return resource.getInputStream().readAllBytes();
+        } catch (IOException | InvalidPathException e) {
             log.warn("Could not load image for table {}: {}", tableNumber, e.getMessage());
             // Return a default placeholder image or null
             return new byte[0];

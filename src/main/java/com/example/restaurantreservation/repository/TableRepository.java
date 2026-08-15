@@ -37,6 +37,27 @@ public interface TableRepository extends JpaRepository<Table, Long> {
             @Param("toTime") LocalTime toTime
     );
 
+    @Query("""
+            SELECT t
+            FROM Table t
+            WHERE t.id = :tableId
+            AND NOT EXISTS (
+                SELECT 1
+                FROM TimeSlot ts
+                WHERE ts.table = t
+                  AND ts.date = :date
+                  AND ts.fromTime >= :fromTime
+                  AND ts.toTime <= :toTime
+                  AND ts.reserved = false
+            )
+            """)
+    Optional<Table> findTableWithReservedTimeSlotsForTimeRange(
+            @Param("tableId") Long tableId,
+            @Param("date") LocalDate date,
+            @Param("fromTime") LocalTime fromTime,
+            @Param("toTime") LocalTime toTime
+    );
+
     // Lock the table for update
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT t FROM Table t WHERE t.id = :tableId")

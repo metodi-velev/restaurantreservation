@@ -16,10 +16,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 /**
  * ╔══════════════════════════════════════════════════════════════════╗
@@ -118,5 +115,16 @@ public class RestaurantReservationController {
 
         return ResponseEntity.ok()
                 .body(resp);
+    }
+
+    @DeleteMapping("{tableId}")
+    public ResponseEntity<Void> cancelReservation(
+            @PathVariable("tableId") Long tableId,
+            @Valid @RequestBody ReservationRequest reservationRequest) {
+        restaurantReservationService.cancelReservation(
+                tableId,
+                reservationRequest.timeSlotDto()
+        );
+        return ResponseEntity.noContent().build();
     }
 }

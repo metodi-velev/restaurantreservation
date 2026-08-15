@@ -9,6 +9,8 @@ public record ErrorDto(
         @Schema(description = "Error code", example = "INVALID_PARTY_SIZE")
         String code,
         @Schema(description = "Descriptive error message", example = "Party size must be between 1 and 40.")
-        String message
+        String message,
+
+        int status
 ) {
 }
