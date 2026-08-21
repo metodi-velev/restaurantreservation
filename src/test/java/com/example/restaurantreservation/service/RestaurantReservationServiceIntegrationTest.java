@@ -3,6 +3,7 @@ package com.example.restaurantreservation.service;
 import com.example.restaurantreservation.dto.TimeSlotDto;
 import com.example.restaurantreservation.entity.TimeSlot;
 import com.example.restaurantreservation.repository.PictureRepository;
+import com.example.restaurantreservation.repository.ReservationRepository;
 import com.example.restaurantreservation.repository.TableRepository;
 import com.example.restaurantreservation.repository.TimeSlotRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -44,6 +45,9 @@ class RestaurantReservationServiceIntegrationTest {
     @Autowired
     private PictureRepository pictureRepository;
 
+    @Autowired
+    private ReservationRepository reservationRepository;
+
     private final AtomicInteger successfulCount = new AtomicInteger(0);
     private final AtomicInteger failureCount = new AtomicInteger(0);
 
@@ -54,6 +58,7 @@ class RestaurantReservationServiceIntegrationTest {
 
     @AfterEach
     void cleanDatabase() {
+        reservationRepository.deleteAllInBatch();
         timeSlotRepository.deleteAllInBatch();
         pictureRepository.deleteAllInBatch();
         tableRepository.deleteAllInBatch();

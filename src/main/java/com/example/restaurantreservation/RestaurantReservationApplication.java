@@ -4,6 +4,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.retry.annotation.EnableRetry;
 
+//JWT + Scheduler
 @SpringBootApplication
 @EnableRetry
 public class RestaurantReservationApplication {

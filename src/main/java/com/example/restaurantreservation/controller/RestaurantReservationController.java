@@ -1,6 +1,7 @@
 package com.example.restaurantreservation.controller;
 
 import com.example.restaurantreservation.dto.ErrorDto;
+import com.example.restaurantreservation.dto.ReservationDto;
 import com.example.restaurantreservation.dto.ReservationRequest;
 import com.example.restaurantreservation.dto.ReservationResponseWithPictureWithEndpoint;
 import com.example.restaurantreservation.entity.Table;
@@ -17,6 +18,8 @@ import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 /**
  * ╔══════════════════════════════════════════════════════════════════╗
@@ -126,5 +129,19 @@ public class RestaurantReservationController {
                 reservationRequest.timeSlotDto()
         );
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/reservations")
+    public ResponseEntity<List<ReservationDto>> getAllReservations() {
+        return ResponseEntity.ok(
+                restaurantReservationService.getAllReservations()
+        );
+    }
+
+    @GetMapping("/reservations/{tableId}")
+    public ResponseEntity<List<ReservationDto>> getReservationForTableId(@PathVariable("tableId") Long tableId) {
+        return ResponseEntity.ok(
+                restaurantReservationService.getReservationForTableId(tableId)
+        );
     }
 }

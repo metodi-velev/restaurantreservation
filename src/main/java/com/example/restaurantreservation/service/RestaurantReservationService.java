@@ -1,5 +1,6 @@
 package com.example.restaurantreservation.service;
 
+import com.example.restaurantreservation.dto.ReservationDto;
 import com.example.restaurantreservation.dto.TimeSlotDto;
 import com.example.restaurantreservation.entity.Picture;
 import com.example.restaurantreservation.entity.Reservation;
@@ -8,6 +9,7 @@ import com.example.restaurantreservation.entity.TimeSlot;
 import com.example.restaurantreservation.exception.ReservationNotFoundException;
 import com.example.restaurantreservation.exception.TimeSlotAlreadyReservedException;
 import com.example.restaurantreservation.exception.TimeSlotNotFoundException;
+import com.example.restaurantreservation.mapper.ReservationMapper;
 import com.example.restaurantreservation.repository.PictureRepository;
 import com.example.restaurantreservation.repository.ReservationRepository;
 import com.example.restaurantreservation.repository.TableRepository;
@@ -80,18 +82,21 @@ public class RestaurantReservationService {
     private final TimeSlotReservationService timeSlotReservationService;
     private final PictureRepository pictureRepository;
     private final ReservationRepository reservationRepository;
+    private final ReservationMapper reservationMapper;
     private final ConcurrentHashMap<String, ReentrantLock> tableLocks = new ConcurrentHashMap<>();
 
     public RestaurantReservationService(TableRepository tableRepository,
                                         TimeSlotRepository timeSlotRepository,
                                         TimeSlotReservationService timeSlotReservationService,
                                         PictureRepository pictureRepository,
-                                        ReservationRepository reservationRepository) {
+                                        ReservationRepository reservationRepository,
+                                        ReservationMapper reservationMapper) {
         this.tableRepository = tableRepository;
         this.timeSlotRepository = timeSlotRepository;
         this.timeSlotReservationService = timeSlotReservationService;
         this.pictureRepository = pictureRepository;
         this.reservationRepository = reservationRepository;
+        this.reservationMapper = reservationMapper;
     }
 
     @Transactional
@@ -227,11 +232,11 @@ public class RestaurantReservationService {
                 timeSlot.from(),
                 timeSlot.to()
         ).orElseThrow(() -> new ReservationNotFoundException(
-            String.format("There exists no (single) reservation for table id %s on %s from %s to %s o'clock",
-                    tableId,
-                    timeSlot.date(),
-                    timeSlot.from(),
-                    timeSlot.to())
+                String.format("There exists no (single) reservation for table id %s on %s from %s to %s o'clock",
+                        tableId,
+                        timeSlot.date(),
+                        timeSlot.from(),
+                        timeSlot.to())
         ));
 
         reservationRepository.delete(reservation);
@@ -369,6 +374,16 @@ public class RestaurantReservationService {
             ));
         }
         log.info("Validation successful: {} tables initialized", tables.size());
+    }
+
+    public List<ReservationDto> getAllReservations() {
+        return reservationRepository.findAll()
+                .stream().map(reservationMapper::reservationToReservationDtoMapper).toList();
+    }
+
+    public List<ReservationDto> getReservationForTableId(Long tableId) {
+        return reservationRepository.findReservationsByTableId(tableId)
+                .stream().map(reservationMapper::reservationToReservationDtoMapper).toList();
     }
 }
 
