@@ -381,7 +381,7 @@ public class RestaurantReservationService {
                 .stream().map(reservationMapper::reservationToReservationDtoMapper).toList();
     }
 
-    public List<ReservationDto> getReservationForTableId(Long tableId) {
+    public List<ReservationDto> getReservationsForTableId(Long tableId) {
         return reservationRepository.findReservationsByTableId(tableId)
                 .stream().map(reservationMapper::reservationToReservationDtoMapper).toList();
     }

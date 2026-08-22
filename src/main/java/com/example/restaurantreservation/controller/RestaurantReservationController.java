@@ -139,9 +139,9 @@ public class RestaurantReservationController {
     }
 
     @GetMapping("/reservations/{tableId}")
-    public ResponseEntity<List<ReservationDto>> getReservationForTableId(@PathVariable("tableId") Long tableId) {
+    public ResponseEntity<List<ReservationDto>> getReservationsForTableId(@PathVariable("tableId") Long tableId) {
         return ResponseEntity.ok(
-                restaurantReservationService.getReservationForTableId(tableId)
+                restaurantReservationService.getReservationsForTableId(tableId)
         );
     }
 }
