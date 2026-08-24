@@ -45,6 +45,10 @@ public class Reservation {
     @ValidTimeFormat
     LocalTime toTime;
 
+    @ManyToOne
+    @JoinColumn(name = "user_id")
+    private User reservedBy;
+
     @Version
     @Column(name = "version")
     private Long version;

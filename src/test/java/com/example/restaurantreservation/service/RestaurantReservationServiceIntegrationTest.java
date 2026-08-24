@@ -2,16 +2,24 @@ package com.example.restaurantreservation.service;
 
 import com.example.restaurantreservation.dto.TimeSlotDto;
 import com.example.restaurantreservation.entity.TimeSlot;
-import com.example.restaurantreservation.repository.PictureRepository;
-import com.example.restaurantreservation.repository.ReservationRepository;
-import com.example.restaurantreservation.repository.TableRepository;
-import com.example.restaurantreservation.repository.TimeSlotRepository;
+import com.example.restaurantreservation.entity.User;
+import com.example.restaurantreservation.repository.*;
+import com.example.restaurantreservation.util.SecurityContextPropagator;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +41,8 @@ import static org.junit.jupiter.api.Assertions.*;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class RestaurantReservationServiceIntegrationTest {
 
+    private User user;
+
     @Autowired
     private RestaurantReservationService reservationService;
 
@@ -48,6 +58,15 @@ class RestaurantReservationServiceIntegrationTest {
     @Autowired
     private ReservationRepository reservationRepository;
 
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private AuthenticationManager authenticationManager;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
     private final AtomicInteger successfulCount = new AtomicInteger(0);
     private final AtomicInteger failureCount = new AtomicInteger(0);
 
@@ -56,12 +75,39 @@ class RestaurantReservationServiceIntegrationTest {
         reservationService.initTables();
     }*/
 
+    @BeforeEach
+    void setup() {
+        user = userRepository.save(
+                User.builder()
+                        .username("testuser")
+                        .password(passwordEncoder.encode("testpassword"))
+                        .roles(List.of("USER"))
+                        .build()
+        );
+
+        Authentication authentication =
+                new UsernamePasswordAuthenticationToken(
+                        user.getUsername(),
+                        user.getPassword(),
+                        user.getRoles().stream()
+                                .map(role -> "ROLE_" + role)
+                                .map(SimpleGrantedAuthority::new)
+                                .toList()
+                );
+
+        SecurityContext context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(authentication);
+        SecurityContextHolder.setContext(context);
+    }
+
     @AfterEach
     void cleanDatabase() {
         reservationRepository.deleteAllInBatch();
         timeSlotRepository.deleteAllInBatch();
         pictureRepository.deleteAllInBatch();
         tableRepository.deleteAllInBatch();
+
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -87,8 +133,8 @@ class RestaurantReservationServiceIntegrationTest {
                 );
             };
 
-            Future<Long> first = executor.submit(task);
-            Future<Long> second = executor.submit(task);
+            Future<Long> first = executor.submit(SecurityContextPropagator.propagate(task));
+            Future<Long> second = executor.submit(SecurityContextPropagator.propagate(task));
 
             ready.await();
             start.countDown();
@@ -140,10 +186,16 @@ class RestaurantReservationServiceIntegrationTest {
 
         // WHEN
         try (ExecutorService executor = Executors.newFixedThreadPool(threadCount)) {
-            IntStream.range(0, threadCount).forEach(i -> executor.submit(() -> {
+            IntStream.range(0, threadCount).forEach(i -> executor.submit(SecurityContextPropagator.propagate(() -> {
                 ready.countDown();
                 try {
                     start.await();
+
+                    // Propagate security context
+                    SecurityContextHolder.getContext().setAuthentication(
+                            SecurityContextHolder.getContext().getAuthentication()
+                    );
+
                     assertThrows(OptimisticLockingFailureException.class, () -> {
                         System.out.println("OptimisticLockingFailureException is thrown.");
                         reservationService.reserveTable(partySize, timeSlot);
@@ -151,7 +203,7 @@ class RestaurantReservationServiceIntegrationTest {
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
                 }
-            }));
+            })));
 
             ready.await();
             start.countDown();
@@ -173,7 +225,7 @@ class RestaurantReservationServiceIntegrationTest {
         try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
 
             // First task - will succeed
-            Runnable task1 = () -> {
+            Runnable task1 = SecurityContextPropagator.propagate(() -> {
                 try {
                     ready.countDown();
                     start.await();
@@ -183,11 +235,11 @@ class RestaurantReservationServiceIntegrationTest {
                     System.err.println("Task 1 failed: " + e.getMessage());
                     e.printStackTrace();
                 }
-            };
+            });
 
             // Second task - may fail with OptimisticLockingFailureException
             // and should reserve the next free table after that
-            Runnable task2 = () -> {
+            Runnable task2 = SecurityContextPropagator.propagate(() -> {
                 try {
                     ready.countDown();
                     start.await();
@@ -200,7 +252,7 @@ class RestaurantReservationServiceIntegrationTest {
                     System.err.println("Task 2 failed: " + e.getMessage());
                     e.printStackTrace();
                 }
-            };
+            });
 
             executor.submit(task1);
             executor.submit(task2);
@@ -257,10 +309,16 @@ class RestaurantReservationServiceIntegrationTest {
         try (ExecutorService executor = Executors.newFixedThreadPool(threadCount)) {
 
             for (int i = 0; i < threadCount; i++) {
-                executor.submit(() -> {
+                executor.submit(SecurityContextPropagator.propagate(() -> {
                     try {
                         ready.countDown();
                         start.await();
+
+                        // Propagate security context
+                        SecurityContextHolder.getContext().setAuthentication(
+                                SecurityContextHolder.getContext().getAuthentication()
+                        );
+
                         Long tableId = reservationService.reserveTable(partySize, timeSlot);
                         synchronized (results) {
                             results.add(tableId);
@@ -270,7 +328,7 @@ class RestaurantReservationServiceIntegrationTest {
                             errors.add(e);
                         }
                     }
-                });
+                }));
             }
 
             ready.await();
@@ -318,10 +376,16 @@ class RestaurantReservationServiceIntegrationTest {
         try (ExecutorService executor = Executors.newFixedThreadPool(numberOfRequests)) {
 
             for (int i = 0; i < numberOfRequests; i++) {
-                executor.submit(() -> {
+                executor.submit(SecurityContextPropagator.propagate(() -> {
                     try {
                         ready.countDown();
                         start.await();
+
+                        // Propagate security context
+                        SecurityContextHolder.getContext().setAuthentication(
+                                SecurityContextHolder.getContext().getAuthentication()
+                        );
+
                         Long tableId = reservationService.reserveTable(partySize, timeSlot);
                         synchronized (reservedTables) {
                             reservedTables.add(tableId);
@@ -331,7 +395,7 @@ class RestaurantReservationServiceIntegrationTest {
                         failureCount.incrementAndGet();
                         System.out.println("Failed: " + e.getMessage());
                     }
-                });
+                }));
             }
 
             ready.await();
@@ -375,7 +439,7 @@ class RestaurantReservationServiceIntegrationTest {
 
         // WHEN
         try (ExecutorService executor = Executors.newFixedThreadPool(threadCount)) {
-            IntStream.range(0, threadCount).forEach(i -> executor.submit(() -> {
+            IntStream.range(0, threadCount).forEach(i -> executor.submit(SecurityContextPropagator.propagate(() -> {
                 try {
                     ready.countDown();
                     start.await();
@@ -392,7 +456,7 @@ class RestaurantReservationServiceIntegrationTest {
                     failed.incrementAndGet();
                     System.out.println("Other exception: " + e.getMessage());
                 }
-            }));
+            })));
 
             ready.await();
             start.countDown();
@@ -414,5 +478,45 @@ class RestaurantReservationServiceIntegrationTest {
                         true, date, from, to);
         assertThat(reservedSlots.size()).isEqualTo(results.size() * 2);
         assertThat(reservedSlots).allMatch(TimeSlot::isReserved);
+    }
+
+    @Test
+    void shouldAuthenticateUserWithCorrectPassword() {
+        // Given - User exists in DB with encoded password
+        userRepository.save(
+                User.builder()
+                        .username("john")
+                        .password(passwordEncoder.encode("secret123"))
+                        .roles(List.of("USER"))
+                        .build()
+        );
+
+        // When - Spring Security authenticates
+        Authentication auth = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken("john", "secret123")
+        );
+
+        // Then - Authentication successful
+        assertTrue(auth.isAuthenticated());
+        assertEquals("john", auth.getName());
+    }
+
+    @Test
+    void shouldFailAuthenticationWithWrongPassword() {
+        // Given
+        userRepository.save(
+                User.builder()
+                        .username("john")
+                        .password(passwordEncoder.encode("secret123"))
+                        .roles(List.of("USER"))
+                        .build()
+        );
+
+        // When/Then
+        assertThrows(BadCredentialsException.class, () -> {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken("john", "wrongpassword")
+            );
+        });
     }
 }

@@ -2,18 +2,12 @@ package com.example.restaurantreservation.service;
 
 import com.example.restaurantreservation.dto.ReservationDto;
 import com.example.restaurantreservation.dto.TimeSlotDto;
-import com.example.restaurantreservation.entity.Picture;
-import com.example.restaurantreservation.entity.Reservation;
-import com.example.restaurantreservation.entity.Table;
-import com.example.restaurantreservation.entity.TimeSlot;
+import com.example.restaurantreservation.entity.*;
 import com.example.restaurantreservation.exception.ReservationNotFoundException;
 import com.example.restaurantreservation.exception.TimeSlotAlreadyReservedException;
 import com.example.restaurantreservation.exception.TimeSlotNotFoundException;
 import com.example.restaurantreservation.mapper.ReservationMapper;
-import com.example.restaurantreservation.repository.PictureRepository;
-import com.example.restaurantreservation.repository.ReservationRepository;
-import com.example.restaurantreservation.repository.TableRepository;
-import com.example.restaurantreservation.repository.TimeSlotRepository;
+import com.example.restaurantreservation.repository.*;
 import jakarta.annotation.PostConstruct;
 import lombok.Builder;
 import lombok.Getter;
@@ -25,6 +19,7 @@ import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Recover;
 import org.springframework.retry.annotation.Retryable;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -83,6 +78,9 @@ public class RestaurantReservationService {
     private final PictureRepository pictureRepository;
     private final ReservationRepository reservationRepository;
     private final ReservationMapper reservationMapper;
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final UserService userService;
     private final ConcurrentHashMap<String, ReentrantLock> tableLocks = new ConcurrentHashMap<>();
 
     public RestaurantReservationService(TableRepository tableRepository,
@@ -90,13 +88,19 @@ public class RestaurantReservationService {
                                         TimeSlotReservationService timeSlotReservationService,
                                         PictureRepository pictureRepository,
                                         ReservationRepository reservationRepository,
-                                        ReservationMapper reservationMapper) {
+                                        ReservationMapper reservationMapper,
+                                        UserRepository userRepository,
+                                        PasswordEncoder passwordEncoder,
+                                        UserService userService) {
         this.tableRepository = tableRepository;
         this.timeSlotRepository = timeSlotRepository;
         this.timeSlotReservationService = timeSlotReservationService;
         this.pictureRepository = pictureRepository;
         this.reservationRepository = reservationRepository;
         this.reservationMapper = reservationMapper;
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.userService = userService;
     }
 
     @Transactional
@@ -226,6 +230,8 @@ public class RestaurantReservationService {
 
     public void cancelReservation(Long tableId, TimeSlotDto timeSlot) {
 
+        User user = userService.getCurrentUser();
+
         Reservation reservation = reservationRepository.findReservationByTableIdAndDateAndFromTimeAndToTime(
                 tableId,
                 timeSlot.date(),
@@ -238,6 +244,11 @@ public class RestaurantReservationService {
                         timeSlot.from(),
                         timeSlot.to())
         ));
+
+        // Check if the current user owns this reservation
+        if (!reservation.getReservedBy().getId().equals(user.getId())) {
+            throw new SecurityException("You can only delete your own reservations");
+        }
 
         reservationRepository.delete(reservation);
 
@@ -255,7 +266,10 @@ public class RestaurantReservationService {
                         timeSlot.from(),
                         timeSlot.to()
                 );
-        reservedTimeSlots.forEach(reservedTimeSlot -> reservedTimeSlot.setReserved(false));
+        reservedTimeSlots.forEach(reservedTimeSlot -> {
+            reservedTimeSlot.setReserved(false);
+            reservedTimeSlot.setReservedBy(null);
+        });
 
 /*        Optional<Table> reservedTable = tables.stream()
                 .filter(table -> table.getId().equals(tableId))
@@ -276,12 +290,35 @@ public class RestaurantReservationService {
             return;
         }
 
+        initTablesData();
+        initDefaultUsers();
+
+        log.info("Successfully initialized tables and default users");
+    }
+
+    private void initTablesData() {
         List<Table> tables = createTables();
         tableRepository.saveAll(tables);
-
         validateTables(tables);
-
         log.info("Successfully initialized {} tables", tables.size());
+    }
+
+    private void initDefaultUsers() {
+        List<User> defaultUsers = List.of(
+                User.builder()
+                        .username("user")
+                        .password(passwordEncoder.encode("userpassword"))
+                        .roles(List.of("USER"))
+                        .build(),
+                User.builder()
+                        .username("admin")
+                        .password(passwordEncoder.encode("adminpassword"))
+                        .roles(List.of("USER", "ADMIN"))
+                        .build()
+        );
+
+        userRepository.saveAll(defaultUsers)
+                .forEach(user -> log.info("Successfully created user: {}", user.getUsername()));
     }
 
     private List<Table> createTables() {

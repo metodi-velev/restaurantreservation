@@ -54,6 +54,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                         .build());
     }
 
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<ErrorDto> handleUserNotFoundException(UserNotFoundException exception) {
+        log.warn("UserNotFoundException: {}", exception.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ErrorDto.builder()
+                        .code("USER_NOT_FOUND")
+                        .message(exception.getMessage())
+                        .status(HttpStatus.NOT_FOUND.value())
+                        .build());
+    }
+
     @ExceptionHandler(TimeSlotAlreadyReservedException.class)
     public ResponseEntity<ErrorDto> handleTimeSlotAlreadyReservedException(TimeSlotAlreadyReservedException exception) {
         log.warn("TimeSlotAlreadyReservedException: {}", exception.getMessage());

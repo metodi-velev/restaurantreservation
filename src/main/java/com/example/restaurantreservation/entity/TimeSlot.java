@@ -36,6 +36,10 @@ public class TimeSlot {
 
     boolean reserved;
 
+    @ManyToOne
+    @JoinColumn(name = "user_id")
+    private User reservedBy;
+
     @Version
     @Column(name = "version")
     private Long version;

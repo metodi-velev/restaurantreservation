@@ -2,10 +2,12 @@ package com.example.restaurantreservation.service;
 
 import com.example.restaurantreservation.entity.Reservation;
 import com.example.restaurantreservation.entity.TimeSlot;
+import com.example.restaurantreservation.entity.User;
 import com.example.restaurantreservation.exception.TimeSlotAlreadyReservedException;
 import com.example.restaurantreservation.exception.TimeSlotNotFoundException;
 import com.example.restaurantreservation.repository.ReservationRepository;
 import com.example.restaurantreservation.repository.TimeSlotRepository;
+import com.example.restaurantreservation.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.retry.annotation.Backoff;
@@ -24,11 +26,17 @@ public class TimeSlotReservationService {
 
     private final TimeSlotRepository timeSlotRepository;
     private final ReservationRepository reservationRepository;
+    private final UserRepository userRepository;
+    private final UserService userService;
 
     public TimeSlotReservationService(TimeSlotRepository timeSlotRepository,
-                                      ReservationRepository reservationRepository) {
+                                      ReservationRepository reservationRepository,
+                                      UserRepository userRepository,
+                                      UserService userService) {
         this.timeSlotRepository = timeSlotRepository;
         this.reservationRepository = reservationRepository;
+        this.userRepository = userRepository;
+        this.userService = userService;
     }
 
     @Retryable(
@@ -60,7 +68,12 @@ public class TimeSlotReservationService {
             throw new TimeSlotAlreadyReservedException("Time slot already reserved.");
         }
 
-        slots.forEach(slot -> slot.setReserved(true));
+        User user = userService.getCurrentUser();
+
+        slots.forEach(slot -> {
+            slot.setReserved(true);
+            slot.setReservedBy(user);
+        });
 
         timeSlotRepository.saveAll(slots);
 
@@ -72,6 +85,7 @@ public class TimeSlotReservationService {
                         .date(date)
                         .fromTime(from)
                         .toTime(to)
+                        .reservedBy(user)
                         .build()
         );
 
