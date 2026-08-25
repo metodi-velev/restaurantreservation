@@ -4,7 +4,9 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Entity
 @Getter
@@ -24,8 +26,14 @@ public class User {
     @Column(nullable = false)
     private String password;
 
-    @Column(nullable = false)
-    private List<String> roles;
+    @Builder.Default
+    @ElementCollection
+    @CollectionTable(
+            name = "user_roles",
+            joinColumns = @JoinColumn(name = "user_id")
+    )
+    @Column(name = "role", nullable = false)
+    private Set<String> roles = new HashSet<>();
 
     @OneToMany(mappedBy = "reservedBy", cascade = CascadeType.ALL)
     @Builder.Default

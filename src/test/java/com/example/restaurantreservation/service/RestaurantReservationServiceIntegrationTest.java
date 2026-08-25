@@ -28,6 +28,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
@@ -81,7 +82,7 @@ class RestaurantReservationServiceIntegrationTest {
                 User.builder()
                         .username("testuser")
                         .password(passwordEncoder.encode("testpassword"))
-                        .roles(List.of("USER"))
+                        .roles(Set.of("USER"))
                         .build()
         );
 
@@ -481,13 +482,14 @@ class RestaurantReservationServiceIntegrationTest {
     }
 
     @Test
+    @Transactional
     void shouldAuthenticateUserWithCorrectPassword() {
         // Given - User exists in DB with encoded password
         userRepository.save(
                 User.builder()
                         .username("john")
                         .password(passwordEncoder.encode("secret123"))
-                        .roles(List.of("USER"))
+                        .roles(Set.of("USER"))
                         .build()
         );
 
@@ -508,7 +510,7 @@ class RestaurantReservationServiceIntegrationTest {
                 User.builder()
                         .username("john")
                         .password(passwordEncoder.encode("secret123"))
-                        .roles(List.of("USER"))
+                        .roles(Set.of("USER"))
                         .build()
         );
 

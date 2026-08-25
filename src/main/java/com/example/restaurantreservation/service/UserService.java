@@ -12,7 +12,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -26,7 +26,7 @@ public class UserService {
      * Creates a new user with encoded password.
      */
     @Transactional
-    public User createUser(String username, String password, List<String> roles) {
+    public User createUser(String username, String password, Set<String> roles) {
         if (userRepository.findByUsername(username).isPresent()) {
             throw new RuntimeException("Username already exists: " + username);
         }

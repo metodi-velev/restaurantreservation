@@ -29,6 +29,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.IntStream;
@@ -308,12 +309,12 @@ public class RestaurantReservationService {
                 User.builder()
                         .username("user")
                         .password(passwordEncoder.encode("userpassword"))
-                        .roles(List.of("USER"))
+                        .roles(Set.of("USER"))
                         .build(),
                 User.builder()
                         .username("admin")
                         .password(passwordEncoder.encode("adminpassword"))
-                        .roles(List.of("USER", "ADMIN"))
+                        .roles(Set.of("USER", "ADMIN"))
                         .build()
         );
 
