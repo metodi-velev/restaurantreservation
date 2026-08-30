@@ -9,6 +9,8 @@ import com.example.restaurantreservation.entity.TimeSlot;
 import com.example.restaurantreservation.service.RestaurantReservationService;
 import com.example.restaurantreservation.service.RestaurantReservationServiceWithPicture;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -108,6 +110,27 @@ public class RestaurantReservationController {
         ));
     }
 
+    @Operation(
+            summary = "Reserve a table with picture",
+            description = "Creates a new reservation and returns the reserved table ID along with an image endpoint URL to view the table picture."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Table successfully reserved with picture URL",
+                    content = @Content(schema = @Schema(implementation = ReservationResponseWithPictureWithEndpoint.class))
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid request parameters or business rule violation",
+                    content = @Content(schema = @Schema(implementation = ErrorDto.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "No suitable table available for the given party size and time slot",
+                    content = @Content(schema = @Schema(implementation = ErrorDto.class))
+            )
+    })
     @PostMapping("/with-picture")
     public ResponseEntity<ReservationResponseWithPictureWithEndpoint> reserveTableWithPicture(@Valid @RequestBody ReservationRequest reservationRequest) {
 
@@ -120,8 +143,29 @@ public class RestaurantReservationController {
                 .body(resp);
     }
 
+    @Operation(
+            summary = "Cancel a reservation",
+            description = "Cancels an existing reservation for a specified table and time slot."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "204",
+                    description = "Reservation successfully cancelled"
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid request parameters or business rule violation",
+                    content = @Content(schema = @Schema(implementation = ErrorDto.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Table or reservation not found for the given time slot",
+                    content = @Content(schema = @Schema(implementation = ErrorDto.class))
+            )
+    })
     @DeleteMapping("{tableId}")
     public ResponseEntity<Void> cancelReservation(
+            @Parameter(description = "ID of the table whose reservation is to be cancelled", example = "1")
             @PathVariable("tableId") Long tableId,
             @Valid @RequestBody ReservationRequest reservationRequest) {
         restaurantReservationService.cancelReservation(
@@ -131,6 +175,17 @@ public class RestaurantReservationController {
         return ResponseEntity.noContent().build();
     }
 
+    @Operation(
+            summary = "Get all reservations",
+            description = "Retrieves all table reservations across the restaurant."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "List of all reservations successfully retrieved",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = ReservationDto.class)))
+            )
+    })
     @GetMapping("/reservations")
     public ResponseEntity<List<ReservationDto>> getAllReservations() {
         return ResponseEntity.ok(
@@ -138,8 +193,26 @@ public class RestaurantReservationController {
         );
     }
 
+    @Operation(
+            summary = "Get reservations for a table",
+            description = "Retrieves all reservations for a specific table ID."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "List of reservations for the specified table",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = ReservationDto.class)))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Table not found",
+                    content = @Content(schema = @Schema(implementation = ErrorDto.class))
+            )
+    })
     @GetMapping("/reservations/{tableId}")
-    public ResponseEntity<List<ReservationDto>> getReservationsForTableId(@PathVariable("tableId") Long tableId) {
+    public ResponseEntity<List<ReservationDto>> getReservationsForTableId(
+            @Parameter(description = "ID of the table to retrieve reservations for", example = "1")
+            @PathVariable("tableId") Long tableId) {
         return ResponseEntity.ok(
                 restaurantReservationService.getReservationsForTableId(tableId)
         );

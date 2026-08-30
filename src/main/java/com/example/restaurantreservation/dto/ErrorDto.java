@@ -11,6 +11,7 @@ public record ErrorDto(
         @Schema(description = "Descriptive error message", example = "Party size must be between 1 and 40.")
         String message,
 
+        @Schema(description = "HTTP status code", example = "400")
         int status
 ) {
 }
