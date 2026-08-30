@@ -1,6 +1,5 @@
 package com.example.restaurantreservation.service;
 
-import com.example.restaurantreservation.dto.CustomUserDetails;
 import com.example.restaurantreservation.entity.User;
 import com.example.restaurantreservation.exception.UserNotFoundException;
 import com.example.restaurantreservation.repository.UserRepository;
@@ -79,11 +78,13 @@ public class UserService {
 
         Object principal = authentication.getPrincipal();
 
-        if (principal instanceof CustomUserDetails userDetails) {
-            return userDetails.getUser();
-        }
+        if (principal != null) {
+            String username = switch (principal) {
+                case org.springframework.security.core.userdetails.User user -> user.getUsername();
+                case String principalName -> principalName;
+                default -> principal.toString();
+            };
 
-        if (principal instanceof String username) {
             return userRepository.findByUsername(username)
                     .orElseThrow(() -> new UserNotFoundException("User not found: " + username));
         }

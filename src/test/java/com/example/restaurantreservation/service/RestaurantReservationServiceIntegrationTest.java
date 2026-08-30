@@ -16,9 +16,12 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.transaction.annotation.Propagation;
@@ -68,6 +71,9 @@ class RestaurantReservationServiceIntegrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private UserDetailsService userDetailsService;
+
     private final AtomicInteger successfulCount = new AtomicInteger(0);
     private final AtomicInteger failureCount = new AtomicInteger(0);
 
@@ -107,6 +113,7 @@ class RestaurantReservationServiceIntegrationTest {
         timeSlotRepository.deleteAllInBatch();
         pictureRepository.deleteAllInBatch();
         tableRepository.deleteAllInBatch();
+        userRepository.deleteAllInBatch();
 
         SecurityContextHolder.clearContext();
     }
@@ -520,5 +527,31 @@ class RestaurantReservationServiceIntegrationTest {
                     new UsernamePasswordAuthenticationToken("john", "wrongpassword")
             );
         });
+    }
+
+    @Test
+    void shouldLoadUserByUsername() {
+        // Given
+        User user = User.builder()
+                .username("john")
+                .password("encoded_password")
+                .roles(Set.of("USER", "ADMIN"))
+                .build();
+
+        userRepository.save(user);
+
+        //when(userRepository.findByUsernameWithRoles("john")).thenReturn(Optional.of(user));
+
+        // When
+        UserDetails userDetails = userDetailsService.loadUserByUsername("john");
+
+        // Then
+        assertThat(userDetails.getUsername()).isEqualTo(user.getUsername());
+        assertThat(userDetails.getAuthorities())
+                .extracting(GrantedAuthority::getAuthority)
+                .containsExactlyInAnyOrder(user.getRoles()
+                        .stream()
+                        .map(role -> "ROLE_" + role)
+                        .toArray(String[]::new));
     }
 }
