@@ -14,7 +14,7 @@ A professional, high-performance Spring Boot application designed to manage rest
 - **Image Service**: Serve table pictures dynamically via dedicated endpoints.
 - **Time Slot Management**: Supports hourly slots (e.g., 10:00–11:00, 18:00–19:00) up to 14 days in advance.
 - **Concurrency & Reliability**: Handled via JPA optimistic locking (`@Version`) combined with Spring Retry (`@Retryable`) with exponential backoff.
-- **Stateless JWT Security**: Full Spring Security integration using JSON Web Tokens (JWT) and role-based access control (`ROLE_USER`, `ROLE_ADMIN`).
+- **Stateless JWT Security**: Full Spring Security integration using JSON Web Tokens (JWT) and role-based access control (`USER`, `ADMIN`).
 - **Robust Validation**: Strict validation for party sizes, time formats, and table availability.
 - **Observability**: Integrated Spring Boot Actuator for health checks and monitoring.
 - **API Documentation**: Interactive Swagger/OpenAPI UI for easy testing and exploration.
@@ -75,8 +75,8 @@ The application uses **Spring Security** configured with stateless **JWT (JSON W
 
 | Username | Password | Roles | Permissions |
 |---|---|---|---|
-| `user` | `userpassword` | `ROLE_USER` | Reserve tables, view table images, view reservations for a specific table |
-| `admin` | `adminpassword` | `ROLE_USER`, `ROLE_ADMIN` | All user actions + Cancel reservations, view all reservations across all tables |
+| `user` | `userpassword` | `USER` | Reserve tables, view table images, view reservations for a specific table |
+| `admin` | `adminpassword` | `USER`, `ADMIN` | All user actions + Cancel reservations, view all reservations across all tables |
 
 ### Role-Based Access Matrix
 
@@ -154,7 +154,7 @@ Authenticate and obtain a JWT bearer token.
 Creates a reservation by finding and assigning the smallest available table for the given party size and hourly time slot.
 
 - **Endpoint**: `POST /tables`
-- **Access**: `ROLE_USER` or `ROLE_ADMIN`
+- **Access**: `USER` or `ADMIN`
 - **Request Headers**:
   ```http
   Content-Type: application/json
@@ -183,7 +183,7 @@ Creates a reservation by finding and assigning the smallest available table for 
 Creates a reservation and returns both the assigned table ID and an image endpoint URL to view the table picture.
 
 - **Endpoint**: `POST /tables/with-picture`
-- **Access**: `ROLE_USER` or `ROLE_ADMIN`
+- **Access**: `USER` or `ADMIN`
 - **Request Headers**:
   ```http
   Content-Type: application/json
@@ -243,7 +243,7 @@ Retrieve all active reservations across all tables in the restaurant.
 Retrieve all reservations associated with a particular table ID.
 
 - **Endpoint**: `GET /tables/reservations/{tableId}`
-- **Access**: `ROLE_USER` or `ROLE_ADMIN`
+- **Access**: `USER` or `ADMIN`
 - **Path Parameter**: `tableId` (e.g. `1`)
 - **Request Headers**:
   ```http
@@ -295,7 +295,7 @@ Cancels an existing reservation for a specified table and time slot.
 Fetches the JPEG image binary associated with the given table ID.
 
 - **Endpoint**: `GET /api/images/table/{tableId}`
-- **Access**: `ROLE_USER` or `ROLE_ADMIN`
+- **Access**: `USER` or `ADMIN`
 - **Path Parameter**: `tableId` (e.g. `1`)
 - **Request Headers**:
   ```http

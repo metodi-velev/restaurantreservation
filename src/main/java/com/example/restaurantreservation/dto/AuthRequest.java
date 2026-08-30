@@ -15,7 +15,7 @@ public record AuthRequest(
         @Schema(description = "Password for authentication or registration", example = "password123")
         String password,
 
-        @Schema(description = "Assigned user roles (e.g. ROLE_USER, ROLE_ADMIN)", example = "[\"ROLE_USER\"]")
+        @Schema(description = "Assigned user roles (e.g. USER, ADMIN)", example = "[\"USER\"]")
         Optional<Set<String>> roles
 ) {
 }

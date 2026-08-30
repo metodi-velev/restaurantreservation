@@ -40,6 +40,13 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authz -> authz
                         .requestMatchers("/h2-console/**", "/h2-console").permitAll() //do not use in production!
                         .requestMatchers("/", "/webjars/**", "/login", "/resources/**").permitAll()
+                        .requestMatchers(
+                                "/swagger-ui/**",
+                                "/swagger-ui.html",
+                                "/v3/api-docs/**",
+                                "/v3/api-docs",
+                                "/swagger-resources/**"
+                        ).permitAll()
                         .requestMatchers("/api/auth/**", "/api/public/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/tables")
                         .hasAnyRole("USER", "ADMIN")
