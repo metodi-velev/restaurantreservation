@@ -65,6 +65,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                         .build());
     }
 
+    @ExceptionHandler(UserAlreadyExistsException.class)
+    public ResponseEntity<ErrorDto> handleUserAlreadyExistsException(UserAlreadyExistsException exception) {
+        log.warn("UserAlreadyExistsException: {}", exception.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorDto.builder()
+                        .code("USER_ALREADY_EXISTS")
+                        .message(exception.getMessage())
+                        .status(HttpStatus.CONFLICT.value())
+                        .build());
+    }
+
     @ExceptionHandler(TimeSlotAlreadyReservedException.class)
     public ResponseEntity<ErrorDto> handleTimeSlotAlreadyReservedException(TimeSlotAlreadyReservedException exception) {
         log.warn("TimeSlotAlreadyReservedException: {}", exception.getMessage());

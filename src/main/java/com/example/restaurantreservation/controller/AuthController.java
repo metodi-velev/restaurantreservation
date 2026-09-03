@@ -4,6 +4,7 @@ import com.example.restaurantreservation.dto.AuthRequest;
 import com.example.restaurantreservation.dto.AuthResponse;
 import com.example.restaurantreservation.dto.ErrorDto;
 import com.example.restaurantreservation.entity.User;
+import com.example.restaurantreservation.exception.UserAlreadyExistsException;
 import com.example.restaurantreservation.repository.UserRepository;
 import com.example.restaurantreservation.security.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -12,6 +13,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -111,14 +113,25 @@ public class AuthController {
             ),
             @ApiResponse(
                     responseCode = "400",
-                    description = "Username already exists or invalid registration data",
-                    content = @Content(schema = @Schema(implementation = ErrorDto.class))
+                    description = "Invalid request body (missing fields, invalid format, etc.)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorDto.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "Username already exists",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorDto.class)
+                    )
             )
     })
     @PostMapping("/register")
-    public String register(@RequestBody AuthRequest authRequest) {
+    public String register(@Valid @RequestBody AuthRequest authRequest) {
         if (userRepository.findByUsername(authRequest.username()).isPresent()) {
-            throw new RuntimeException("Username already exists");
+            throw new UserAlreadyExistsException("Username already exists");
         }
 
         User user = new User();
