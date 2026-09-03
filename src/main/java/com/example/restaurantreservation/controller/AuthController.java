@@ -45,9 +45,32 @@ public class AuthController {
         this.passwordEncoder = passwordEncoder;
     }
 
+    /**
+     * @deprecated As of 2026-09-03, this endpoint is deprecated and will be removed in a future version.
+     * Please use Keycloak's OAuth2/OIDC authentication flow instead.
+     * See: http://localhost:7080/realms/master/.well-known/openid-configuration
+     */
+    @Deprecated(since = "2026-09-03", forRemoval = true)
     @Operation(
-            summary = "User login",
-            description = "Authenticates a user with username and password, returning a JWT bearer token."
+            summary = "User login (DEPRECATED)",
+            description = """
+                ⚠️ **DEPRECATED as of 2026-09-03** ⚠️
+                
+                This endpoint is deprecated and will be removed in a future version.
+                Please use Keycloak's OAuth2/OIDC authentication flow instead.
+                
+                To authenticate, use the following endpoint:
+                `POST http://localhost:7080/realms/master/protocol/openid-connect/token`
+                
+                With form data:
+                - grant_type: password
+                - client_id: your-client-id
+                - client_secret: your-client-secret
+                - username: your-username
+                - password: your-password
+                
+                Authenticates a user with username and password, returning a JWT bearer token.
+                """
     )
     @ApiResponses(value = {
             @ApiResponse(

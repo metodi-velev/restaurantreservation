@@ -1,9 +1,10 @@
 package com.example.restaurantreservation.config;
 
-import com.example.restaurantreservation.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.convert.converter.Converter;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -13,21 +14,46 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    //private final JwtAuthenticationFilter jwtAuthenticationFilter;
     //private final UserDetailsService userDetailsService;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+/*    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+    }*/
+
+    @Bean
+    public JwtDecoder jwtDecoder() {
+        // Direct JWK Set URI - skip discovery
+        try {
+            return NimbusJwtDecoder.withJwkSetUri(
+                    "http://localhost:7080/realms/master/protocol/openid-connect/certs"
+            ).build();
+        } catch (Exception e) {
+            System.err.println("Failed to create JwtDecoder: " + e.getMessage());
+            // Return a no-op decoder as fallback
+            return token -> null;
+        }
     }
 
     @Bean
@@ -62,10 +88,13 @@ public class SecurityConfig {
                         .hasAnyRole("USER", "ADMIN")
                         .anyRequest().authenticated()
                 )
+                .oauth2ResourceServer(oAuth2ResourceServerSpec -> oAuth2ResourceServerSpec
+                        .jwt(jwtSpec -> jwtSpec.jwtAuthenticationConverter(grantedAuthoritiesExtractor())))
                 //.formLogin(Customizer.withDefaults())
                 //.httpBasic(Customizer.withDefaults())
-                .csrf(AbstractHttpConfigurer::disable)
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .csrf(AbstractHttpConfigurer::disable);
+//                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         //h2 console config
         http.headers(headers -> headers.frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin));
@@ -73,6 +102,57 @@ public class SecurityConfig {
         return http.build();
     }
 
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(List.of("*"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("*"));
+        configuration.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
+
+    private Converter<Jwt, AbstractAuthenticationToken> grantedAuthoritiesExtractor() {
+        JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
+        jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(new KeycloakRoleConverter());
+        return jwtAuthenticationConverter;
+    }
+
+    private Converter<Jwt, AbstractAuthenticationToken> jwtAuthenticationConverter() {
+        System.out.println("Converter entered.");
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+
+        converter.setJwtGrantedAuthoritiesConverter(jwt -> {
+            System.out.println("=== CONVERTER CALLED! ===");
+            System.out.println("JWT claims: " + jwt.getClaims().keySet());
+
+            Map<String, Object> realmAccess = jwt.getClaim("realm_access");
+            System.out.println("realm_access: " + realmAccess);
+
+            if (realmAccess == null || realmAccess.isEmpty()) {
+                System.out.println("No realm_access found!");
+                return List.of();
+            }
+
+            List<String> roles = (List<String>) realmAccess.get("roles");
+            if (roles == null || roles.isEmpty()) {
+                System.out.println("No roles found!");
+                return List.of();
+            }
+
+            System.out.println("Roles found: " + roles);
+
+            return roles.stream()
+                    .map(role -> "ROLE_" + role)
+                    .map(SimpleGrantedAuthority::new)
+                    .collect(Collectors.toList());
+        });
+
+        return converter;
+    }
 /*    @Bean
     public UserDetailsService userDetailsService(UserRepository userRepository) {
         return username -> userRepository.findByUsername(username)
